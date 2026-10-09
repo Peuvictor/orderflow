@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: orderflow
+
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5433/orderflow
+    username: orderflow
+    password: ${DB_PASSWORD:orderflow_dev}
+
+    jpa:
+      hibernate:
+        ddl-auto: validate
+      open-in-view: false
+
+    flyway:
+      enabled: true
+
+server:
+  port: 8080
