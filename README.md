@@ -1,10 +1,12 @@
 # OrderFlow — API de Gerenciamento de Pedidos e Estoque
 
-O **OrderFlow** é uma API REST desenvolvida com Java e Spring Boot para gerenciar produtos, pedidos, movimentações de estoque e reservas temporárias.
+O **OrderFlow** é um projeto de API REST desenvolvido com **Java 25 e Spring Boot** para gerenciar produtos, pedidos, estoque e reservas temporárias.
 
-O projeto tem como objetivo aplicar conceitos de desenvolvimento backend, como **consistência transacional, controle de concorrência, persistência de dados e processamento assíncrono de eventos**.
+O objetivo é exercitar conceitos de desenvolvimento backend, especialmente **regras de negócio, persistência, integridade dos dados, transações, concorrência, idempotência e processamento assíncrono**.
 
-O desenvolvimento segue a metodologia **TDD (Test-Driven Development)**, utilizando arquitetura em camadas e testes automatizados.
+O desenvolvimento é incremental, seguindo **TDD (Test-Driven Development)**, arquitetura em camadas e testes automatizados.
+
+> **Status:** em desenvolvimento. A infraestrutura de persistência e as primeiras regras de produtos já foram implementadas e testadas. Os endpoints REST e o fluxo de pedidos ainda estão planejados.
 
 ## Tecnologias utilizadas
 
@@ -13,199 +15,258 @@ O desenvolvimento segue a metodologia **TDD (Test-Driven Development)**, utiliza
 - **Gradle (Groovy DSL)**
 - **Spring Data JPA / Hibernate**
 - **PostgreSQL 17**
-- **Flyway**
-- **Lombok**
-- **JUnit e Mockito**
+- **Flyway** para versionamento do banco
+- **Lombok** para redução de código repetitivo
+- **JUnit 5 e Mockito** para testes unitários
+- **Testcontainers** para testes de integração com PostgreSQL
 - **Docker e Docker Compose**
 
 ### Tecnologias planejadas
 
-- **Testcontainers:** testes de integração utilizando containers.
-- **RabbitMQ:** processamento assíncrono de eventos.
-- **React + TypeScript:** desenvolvimento de um dashboard para gerenciamento dos pedidos e do estoque.
+- **RabbitMQ:** publicação e processamento assíncrono de eventos.
+- **React + TypeScript:** dashboard para gerenciamento de produtos, pedidos e estoque.
 
 ## Arquitetura
 
-O projeto utiliza **arquitetura em camadas**, separando as responsabilidades da aplicação.
+A aplicação segue uma **arquitetura em camadas**, com responsabilidades separadas:
 
 ```text
-Controller → Service → Repository → PostgreSQL
+Controller (planejado)
+        ↓
+      Service
+        ↓
+     Repository
+        ↓
+     PostgreSQL
 ```
 
-Responsabilidades:
+- **Controller:** receberá requisições HTTP e retornará respostas da API.
+- **Service:** implementa as regras de negócio e coordena operações da aplicação.
+- **Repository:** oferece acesso aos dados por meio do Spring Data JPA.
+- **Model:** representa as entidades e seus comportamentos.
+- **DTO:** será utilizado para definir os contratos de entrada e saída da API.
 
-- **Controller:** recebe requisições HTTP e retorna respostas.
-- **Service:** executa as regras de negócio e gerencia as transações.
-- **Repository:** realiza as operações de persistência.
-- **Model:** representa as entidades e suas regras.
-- **DTO:** transporta os dados das requisições e respostas.
+### Estrutura atual dos principais componentes
+
+```text
+src/
+├── main/
+│   ├── java/com/orderflow/
+│   │   ├── model/
+│   │   │   └── Product.java
+│   │   ├── repository/
+│   │   │   └── ProductRepository.java
+│   │   └── service/
+│   │       ├── ProductService.java
+│   │       └── DuplicateSkuException.java
+│   └── resources/
+│       └── db/migration/
+│           └── V1__create_products_and_inventory.sql
+└── test/
+    └── java/com/orderflow/
+        ├── model/ProductTest.java
+        ├── repository/ProductRepositoryTest.java
+        └── service/ProductServiceTest.java
+```
+
+## Funcionalidades implementadas
+
+### Produtos — domínio
+
+- Criação de produtos com **SKU, nome e preço**.
+- Validação de campos obrigatórios e preço positivo.
+- Restrição de preço a, no máximo, duas casas decimais significativas.
+- Normalização do SKU: remoção de espaços externos e conversão para maiúsculas.
+- Produtos criados inicialmente como **ativos**.
+- Operação de **desativação** de produtos.
+- Mapeamento da entidade `Product` com **JPA**.
+
+### Produtos — persistência e serviço
+
+- Persistência de produtos por meio do `ProductRepository`.
+- Consulta de produtos por SKU (`findBySku`).
+- Verificação de existência de SKU (`existsBySku`).
+- Restrição de **SKU único** no PostgreSQL.
+- Verificação de duplicidade no `ProductService` antes de salvar um produto.
+- Exceção de negócio `DuplicateSkuException` para SKU já cadastrado.
+
+> A validação no serviço melhora o tratamento da regra de negócio. A restrição no banco continua necessária para garantir integridade, inclusive em situações de concorrência. O tratamento dessa exceção como resposta HTTP `409 Conflict` será implementado na camada REST.
 
 ## Funcionalidades planejadas
 
 ### Gerenciamento de produtos
 
-- Cadastro e consulta de produtos.
-- Identificação por SKU único.
+- Endpoints REST para cadastro e consulta.
 - Atualização de informações e preços.
-- Ativação e desativação de produtos.
+- Ativação e desativação pela API.
 - Impedimento de novos pedidos com produtos desativados.
 
 ### Controle de estoque
 
-- Registro de entradas de estoque.
-- Consulta do estoque físico, reservado e disponível.
-- Histórico de movimentações.
+- Registro de entradas e movimentações.
+- Consulta de estoque físico, reservado e disponível.
 - Prevenção de estoque negativo.
-- Controle de concorrência durante reservas.
+- Controle transacional e de concorrência nas reservas.
 
 ### Gerenciamento de pedidos
 
 - Criação de pedidos com múltiplos produtos.
-- Validação integral da disponibilidade.
-- Reserva automática na criação do pedido.
-- Expiração da reserva após **10 minutos**.
-- Confirmação manual pela API.
-- Cancelamento de pedidos reservados.
-- Expedição de pedidos confirmados.
-- Prevenção de requisições duplicadas por chave de idempotência.
+- Rejeição integral do pedido quando qualquer item não tiver estoque suficiente.
+- Reserva automática de estoque na criação.
+- Expiração de reservas após **10 minutos**.
+- Confirmação manual de pedidos pela API.
+- Cancelamento permitido somente para pedidos `RESERVED` dentro do prazo.
+- Expedição de pedidos confirmados, com baixa do estoque físico.
+- Proteção contra solicitações duplicadas usando chave de idempotência.
+- Preservação dos preços dos produtos no momento do pedido.
+- Identificação dos pedidos por **UUID**.
 
-## Ciclo de vida do pedido
-
-Os pedidos poderão assumir cinco estados:
+## Ciclo de vida do pedido (planejado)
 
 ```text
-              RESERVED
-             /    |    \
-            /     |     \
-           v      v      v
-    CANCELLED  EXPIRED  CONFIRMED
-                           |
-                           v
-                        SHIPPED
+                    RESERVED
+                   /   |   \
+                  v    v    v
+          CANCELLED  EXPIRED  CONFIRMED
+                                |
+                                v
+                             SHIPPED
 ```
 
-- **RESERVED:** pedido criado com estoque reservado.
-- **CONFIRMED:** pedido confirmado antes do prazo de expiração.
-- **SHIPPED:** pedido expedido com baixa definitiva no estoque físico.
-- **CANCELLED:** pedido cancelado e reserva liberada.
-- **EXPIRED:** reserva expirada e estoque liberado.
+- **RESERVED:** pedido criado, com estoque reservado por até 10 minutos.
+- **CONFIRMED:** pedido confirmado antes do vencimento da reserva; o estoque permanece reservado.
+- **SHIPPED:** pedido expedido; ocorre a redução definitiva do estoque físico.
+- **CANCELLED:** pedido cancelado enquanto estava reservado; a reserva é liberada.
+- **EXPIRED:** pedido não confirmado dentro do prazo; a reserva é liberada automaticamente.
 
-## Regras de negócio
+**Relação do estoque:**
 
-O sistema seguirá as seguintes regras:
+```text
+Estoque disponível = Estoque físico − Estoque reservado
+```
 
-1. Um pedido poderá conter múltiplos produtos.
-2. Se qualquer produto não possuir estoque suficiente, o pedido inteiro será rejeitado.
-3. O estoque será reservado no momento da criação do pedido.
-4. As reservas terão validade de 10 minutos.
-5. A confirmação será realizada manualmente por um endpoint.
-6. Apenas pedidos reservados e dentro do prazo poderão ser cancelados.
-7. O estoque físico será reduzido somente na expedição.
-8. Pedidos confirmados não poderão ser cancelados no fluxo inicial.
-9. Requisições duplicadas não poderão gerar pedidos adicionais.
-10. Produtos deverão possuir SKU único.
-11. Produtos desativados não poderão participar de novos pedidos.
-12. Os preços serão preservados no momento da criação do pedido.
-13. Os pedidos serão identificados por UUID.
-14. Operações de estoque deverão preservar a consistência dos dados, inclusive em situações de concorrência.
+A criação de uma reserva reduz o **estoque disponível**, mas não o **estoque físico**. A baixa física acontece somente na expedição.
 
 ## Como executar o projeto
 
 ### Pré-requisitos
 
-- JDK 25
-- Docker e Docker Compose
-- Git
+- **JDK 25**
+- **Docker** com suporte a Docker Compose
+- **Git**
 
-O ambiente de desenvolvimento atual utiliza IntelliJ IDEA integrado ao WSL2.
+O ambiente utilizado no desenvolvimento é o **IntelliJ IDEA no Windows integrado ao Ubuntu WSL2**, com Docker Desktop e integração WSL habilitada.
 
 ### 1. Iniciar o PostgreSQL
 
-Na raiz do projeto, execute:
+Na raiz do projeto:
 
 ```bash
-docker compose up -d
+docker compose up -d postgres
 ```
 
-O PostgreSQL estará disponível na porta `5433`, configurada para evitar conflito com a instalação local.
+O PostgreSQL de desenvolvimento é exposto em `127.0.0.1:5433` para evitar conflito com uma instalação local na porta `5432`.
+
+Verifique o container:
+
+```bash
+docker compose ps
+```
 
 ### 2. Executar a aplicação
 
 ```bash
-./gradlew bootRun
+./gradlew bootRun --no-daemon --no-watch-fs --console=plain
 ```
 
-O Flyway executará as migrations pendentes durante a inicialização.
+O **Flyway** aplica as migrations pendentes na inicialização. O Hibernate está configurado para **validar** o esquema, sem criá-lo automaticamente.
+
+> Os dados e a senha definidos no `compose.yaml` destinam-se ao ambiente local de desenvolvimento; não devem ser reutilizados em produção.
 
 ### 3. Executar os testes
 
-```bash
-./gradlew test --no-daemon --no-watch-fs
-```
-
-Para executar apenas os testes da entidade `Product`:
+Todos os testes:
 
 ```bash
-./gradlew test --tests 'com.orderflow.model.ProductTest' --no-daemon --no-watch-fs
+./gradlew test --no-daemon --no-watch-fs --console=plain
 ```
+
+Testes unitários do domínio:
+
+```bash
+./gradlew test --tests 'com.orderflow.model.ProductTest' --no-daemon --no-watch-fs --console=plain
+```
+
+Testes de integração do repositório:
+
+```bash
+./gradlew test --tests 'com.orderflow.repository.ProductRepositoryTest' --no-daemon --no-watch-fs --console=plain
+```
+
+Testes unitários do serviço:
+
+```bash
+./gradlew test --tests 'com.orderflow.service.ProductServiceTest' --no-daemon --no-watch-fs --console=plain
+```
+
+**Importante:** os testes com **Testcontainers** precisam que o Docker esteja em execução. O container PostgreSQL usado nos testes é separado do banco de desenvolvimento.
 
 ## Banco de dados
 
-O projeto utiliza PostgreSQL para persistência e Flyway para gerenciamento das migrations.
-
-Os scripts SQL estão localizados em:
+O projeto utiliza **PostgreSQL 17** e **Flyway**. As migrations ficam em:
 
 ```text
 src/main/resources/db/migration/
 ```
 
-O controle de estoque seguirá a relação:
+A migration inicial (`V1`) prepara as tabelas de **produtos e inventário**. As estruturas relacionadas a pedidos, reservas e movimentações serão adicionadas nas próximas etapas.
 
-**Estoque disponível = Estoque físico − Estoque reservado**
+## Estratégia de testes
 
-A reserva compromete a disponibilidade, enquanto a baixa física acontece somente após a expedição.
+O desenvolvimento segue o ciclo:
 
-## Testes automatizados
+1. **RED:** escrever um teste que falha, estabelecendo o comportamento esperado.
+2. **GREEN:** implementar o mínimo necessário para fazê-lo passar.
+3. **REFACTOR:** melhorar o código preservando os testes.
 
-O desenvolvimento segue o ciclo TDD:
+### Cobertura implementada até o momento
 
-1. **RED:** escrever um teste que falha.
-2. **GREEN:** implementar o mínimo necessário para passar.
-3. **REFACTOR:** melhorar a implementação mantendo os testes passando.
+| Teste | Responsabilidade |
+|---|---|
+| `ProductTest` | Criação, validações, normalização do SKU e desativação |
+| `ProductRepositoryTest` | Persistência, consulta por SKU e rejeição de SKU duplicado no PostgreSQL |
+| `ProductServiceTest` | Rejeição de SKU duplicado, com Mockito e sem gravação no banco |
 
-A estratégia de testes inclui:
+Os testes de repositório usam **Testcontainers** para validar o comportamento com PostgreSQL real, sem depender dos dados do banco de desenvolvimento.
+- [x] Mapeamento JPA da entidade `Product`.
+- [x] Implementação de `ProductRepository`.
+- [x] Testes de integração com PostgreSQL usando Testcontainers.
+- [x] Restrição de SKU único validada no banco.
+- [x] Implementação inicial de `ProductService` e `DuplicateSkuException`.
+- [x] Teste unitário de rejeição de SKU duplicado no serviço.
 
-- Testes unitários para regras de negócio.
-- Testes de integração com PostgreSQL.
-- Testes de endpoints REST.
-- Testes de transações e concorrência.
-- Testes de expiração de reservas.
+### Próximas etapas
 
-## Progresso do desenvolvimento
-
-### Concluído
-
-- [x] Configuração inicial do Spring Boot com Java 25.
-- [x] Configuração do Gradle com Groovy DSL.
-- [x] PostgreSQL 17 executando no Docker.
-- [x] Configuração da conexão com o banco.
-- [x] Primeira migration executada com Flyway.
-- [x] Primeiros testes unitários da entidade Product utilizando TDD.
-
-### Em desenvolvimento
-
-- [ ] Persistência e endpoints de produtos.
-- [ ] Gerenciamento de estoque.
-- [ ] Criação e validação de pedidos.
-- [ ] Reserva temporária e expiração automática.
-- [ ] Confirmação, cancelamento e expedição.
-- [ ] Tratamento de concorrência e idempotência.
-- [ ] Testes de integração com Testcontainers.
-- [ ] Mensageria com RabbitMQ.
-- [ ] Dashboard em React e TypeScript.
+- [ ] Ampliar os testes do `ProductService` para cadastro com SKU disponível.
+- [ ] Implementar DTOs, tratamento de erros e endpoints REST de produtos.
+- [ ] Implementar operações de estoque.
+- [ ] Implementar criação de pedidos e reserva temporária.
+- [ ] Implementar confirmação, cancelamento, expiração e expedição.
+- [ ] Testar transações, concorrência e idempotência.
+- [ ] Integrar mensageria com RabbitMQ.
+- [ ] Desenvolver dashboard em React + TypeScript.
 
 ## Status do projeto
 
 **Em desenvolvimento.**
 
-O OrderFlow está sendo construído de forma incremental, priorizando testes automatizados, organização do código, consistência dos dados e boas práticas de desenvolvimento backend.
+O OrderFlow está sendo construído de maneira incremental, priorizando **testes automatizados, regras de negócio explícitas, integridade dos
+## Progresso do desenvolvimento
+
+### Concluído
+
+- [x] Configuração de Java 25, Spring Boot e Gradle Groovy.
+- [x] Configuração do PostgreSQL 17 com Docker Compose.
+- [x] Configuração de conexão com o banco e primeira migration Flyway.
+- [x] Testes unitários da entidade `Product`.
+
