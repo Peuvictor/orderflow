@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -44,5 +45,27 @@ class ProductRepositoryTest {
 
         assertTrue(result.isPresent());
         assertEquals("Teclado Mecânico", result.get().getName());
+    }
+    @Test
+    void shouldRejectDuplicateSku() {
+
+        Product firstProduct = new Product(
+                "SKU-001",
+                "Teclado Mecânico",
+                new BigDecimal("250.00")
+        );
+
+        Product secondProduct = new Product(
+                "SKU-001",
+                "Mouse Gamer",
+                new BigDecimal("150.00")
+        );
+
+        productRepository.saveAndFlush(firstProduct);
+
+        assertThrows(
+                DataIntegrityViolationException.class,
+                () -> productRepository.saveAndFlush(secondProduct)
+        );
     }
 }
