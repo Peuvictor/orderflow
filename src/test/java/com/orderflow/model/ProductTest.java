@@ -70,6 +70,7 @@ class ProductTest {
                 )
         );
     }
+
     @Test
     void shouldDeactivateProduct() {
         Product product = new Product(
@@ -78,7 +79,10 @@ class ProductTest {
                 new BigDecimal("250.00")
         );
 
+        assertTrue(product.isActive());
+
         product.deactivate();
 
         assertFalse(product.isActive());
-    }}
+    }
+}
