@@ -85,4 +85,16 @@ class ProductTest {
 
         assertFalse(product.isActive());
     }
+
+    @Test
+    void shouldRejectPriceWithMoreThanTwoDecimalPlaces() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new Product(
+                        "SKU-006",
+                        "Mouse Gamer",
+                        new BigDecimal("150.999")
+                )
+        );
+    }
 }
