@@ -30,10 +30,18 @@ public class ProductService {
     }
     public Product getProductBySku(String sku) {
 
+        if (sku == null || sku.isBlank()) {
+            throw new IllegalArgumentException(
+                    "SKU cannot be empty"
+            );
+        }
+
         String normalizedSku = sku.trim()
                 .toUpperCase(Locale.ROOT);
 
         return repository.findBySku(normalizedSku)
-                .orElseThrow();
+                .orElseThrow(
+                        () -> new ProductNotFoundException(normalizedSku)
+                );
     }
 }

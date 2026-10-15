@@ -100,4 +100,37 @@ class ProductServiceTest {
 
         verify(repository).findBySku("SKU-007");
     }
+    @Test
+    void shouldThrowExceptionWhenProductIsNotFound() {
+
+        // Arrange
+        ProductRepository repository = mock(ProductRepository.class);
+        ProductService service = new ProductService(repository);
+
+        when(repository.findBySku("SKU-999"))
+                .thenReturn(Optional.empty());
+
+        // Act + Assert
+        ProductNotFoundException exception = assertThrows(
+                ProductNotFoundException.class,
+                () -> service.getProductBySku(" sku-999 ")
+        );
+
+        assertTrue(exception.getMessage().contains("SKU-999"));
+
+        verify(repository).findBySku("SKU-999");
+    }
+    @Test
+    void shouldRejectBlankSkuWhenSearching() {
+
+        ProductRepository repository = mock(ProductRepository.class);
+        ProductService service = new ProductService(repository);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.getProductBySku("   ")
+        );
+
+        verifyNoInteractions(repository);
+    }
 }
