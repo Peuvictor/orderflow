@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -26,5 +27,13 @@ public class ProductService {
         }
 
         return repository.save(product);
+    }
+    public Product getProductBySku(String sku) {
+
+        String normalizedSku = sku.trim()
+                .toUpperCase(Locale.ROOT);
+
+        return repository.findBySku(normalizedSku)
+                .orElseThrow();
     }
 }
