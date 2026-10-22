@@ -88,4 +88,58 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.message")
                         .value("Product with SKU SKU-001 already exists"));
     }
+    @Test
+    void shouldReturn400WhenSkuIsBlank() throws Exception {
+
+        mockMvc.perform(
+                        post("/products")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                            {
+                                "sku": "",
+                                "name": "Teclado Mecânico",
+                                "price": 250.00
+                            }
+                            """)
+                )
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(productService);
+    }
+    @Test
+    void shouldReturn400WhenNameIsBlank() throws Exception {
+
+        mockMvc.perform(
+                        post("/products")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                            {
+                                "sku": "SKU-008",
+                                "name": "",
+                                "price": 250.00
+                            }
+                            """)
+                )
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(productService);
+    }
+    @Test
+    void shouldReturn400WhenPriceIsNull() throws Exception {
+
+        mockMvc.perform(
+                        post("/products")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                            {
+                                "sku": "SKU-009",
+                                "name": "Mouse Gamer",
+                                "price": null
+                            }
+                            """)
+                )
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(productService);
+    }
 }

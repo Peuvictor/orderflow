@@ -6,6 +6,7 @@ import com.orderflow.model.Product;
 import com.orderflow.service.ProductService;
 
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,7 +21,7 @@ public class ProductController {
 
     @PostMapping
     public ResponseEntity<ProductResponse> createProduct(
-            @RequestBody CreateProductRequest request
+            @Valid @RequestBody CreateProductRequest request
     ) {
 
         Product product = productService.createProduct(
