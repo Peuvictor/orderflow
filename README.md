@@ -1,127 +1,208 @@
-# OrderFlow — API de Gerenciamento de Pedidos e Estoque
+# OrderFlow — API de gerenciamento de pedidos e estoque
 
-O **OrderFlow** é um projeto de API REST desenvolvido com **Java 25 e Spring Boot** para gerenciar produtos, pedidos, estoque e reservas temporárias.
+O **OrderFlow** é uma API REST desenvolvida em **Java 25 com Spring Boot** para gerenciar produtos e, nas próximas etapas, pedidos, reservas temporárias e movimentações de estoque.
 
-O objetivo é exercitar conceitos de desenvolvimento backend, especialmente **regras de negócio, persistência, integridade dos dados, transações, concorrência, idempotência e processamento assíncrono**.
+É um projeto de estudo e portfólio com foco em **TDD (Test-Driven Development)**, arquitetura em camadas, integridade dos dados, persistência relacional, consistência transacional, concorrência, idempotência e, futuramente, eventos assíncronos.
 
-O desenvolvimento é incremental, seguindo **TDD (Test-Driven Development)**, arquitetura em camadas e testes automatizados.
+> **Status (22/10/2026): em desenvolvimento.** A documentação acompanha as etapas implementadas no ambiente local de desenvolvimento. **A branch `main` do GitHub ainda pode estar atrás do código local**: na última conferência, os endpoints de consulta (`GET`) e alguns tratamentos/validações HTTP ainda não constavam na versão remota. Consulte [Sincronização com o GitHub](#sincronização-com-o-github).
 
-> **Status:** em desenvolvimento. A infraestrutura de persistência e as primeiras regras de produtos já foram implementadas e testadas. Os endpoints REST e o fluxo de pedidos ainda estão planejados.
+## Tecnologias
 
-## Tecnologias utilizadas
+### Em uso
 
-- **Java 25**
-- **Spring Boot**
-- **Gradle (Groovy DSL)**
-- **Spring Data JPA / Hibernate**
-- **PostgreSQL 17**
-- **Flyway** para versionamento do banco
-- **Lombok** para redução de código repetitivo
-- **JUnit 5 e Mockito** para testes unitários
-- **Testcontainers** para testes de integração com PostgreSQL
-- **Docker e Docker Compose**
+- **Java 25** e **Spring Boot 4**
+- **Gradle**, com Groovy DSL e Gradle Wrapper
+- **Spring Web MVC** — endpoints REST e MockMvc
+- **Spring Data JPA / Hibernate** — persistência
+- **Jakarta Bean Validation** — validação de requisições
+- **PostgreSQL 17** — banco relacional
+- **Flyway** — versionamento do esquema SQL
+- **Lombok** — redução seletiva de código repetitivo
+- **JUnit 5 e Mockito** — testes de domínio, serviço e camada HTTP
+- **Testcontainers** — testes com PostgreSQL real e isolado
+- **Docker / Docker Compose** — ambiente local
 
-### Tecnologias planejadas
+### Planejadas
 
-- **RabbitMQ:** publicação e processamento assíncrono de eventos.
-- **React + TypeScript:** dashboard para gerenciamento de produtos, pedidos e estoque.
+- **RabbitMQ** — publicação e consumo de eventos de negócio
+- **React + TypeScript** — dashboard para produtos, pedidos e estoque
 
 ## Arquitetura
 
-A aplicação segue uma **arquitetura em camadas**, com responsabilidades separadas:
+O sistema segue a separação de responsabilidades:
 
 ```text
-Controller (planejado)
-        ↓
-      Service
-        ↓
-     Repository
-        ↓
-     PostgreSQL
+Cliente HTTP
+     │
+     ▼
+Controller ──► DTOs de requisição/resposta
+     │
+     ▼
+  Service ───► Regras de negócio e exceções
+     │
+     ▼
+ Repository ──► Spring Data JPA / Hibernate
+     │
+     ▼
+ PostgreSQL ◄── Flyway (migrations)
 ```
 
-- **Controller:** receberá requisições HTTP e retornará respostas da API.
-- **Service:** implementa as regras de negócio e coordena operações da aplicação.
-- **Repository:** oferece acesso aos dados por meio do Spring Data JPA.
-- **Model:** representa as entidades e seus comportamentos.
-- **DTO:** será utilizado para definir os contratos de entrada e saída da API.
+- **Controller:** define os contratos e status HTTP, delegando as operações ao serviço.
+- **DTOs:** separam o contrato público da API das entidades persistidas.
+- **Service:** aplica regras de negócio, como normalização e verificação de SKU.
+- **Repository:** consulta e persiste entidades.
+- **Model:** encapsula a entidade `Product`, suas validações e comportamentos.
+- **GlobalExceptionHandler:** converte exceções da aplicação em respostas HTTP.
 
-### Estrutura atual dos principais componentes
+### Principais arquivos
 
 ```text
 src/
 ├── main/
 │   ├── java/com/orderflow/
+│   │   ├── controller/
+│   │   │   ├── ProductController.java
+│   │   │   └── GlobalExceptionHandler.java
+│   │   ├── dto/
+│   │   │   ├── CreateProductRequest.java
+│   │   │   ├── ProductResponse.java
+│   │   │   └── ApiErrorResponse.java
 │   │   ├── model/
 │   │   │   └── Product.java
 │   │   ├── repository/
 │   │   │   └── ProductRepository.java
 │   │   └── service/
 │   │       ├── ProductService.java
-│   │       └── DuplicateSkuException.java
+│   │       ├── DuplicateSkuException.java
+│   │       └── ProductNotFoundException.java
 │   └── resources/
+│       ├── application.yml
 │       └── db/migration/
 │           └── V1__create_products_and_inventory.sql
 └── test/
     └── java/com/orderflow/
         ├── model/ProductTest.java
         ├── repository/ProductRepositoryTest.java
-        └── service/ProductServiceTest.java
+        ├── service/ProductServiceTest.java
+        ├── controller/ProductControllerTest.java
+        └── OrderflowApplicationTests.java
 ```
 
-## Funcionalidades implementadas
+> Um teste adicional, `ProductApiIntegrationTest`, foi planejado para verificar o fluxo HTTP completo com PostgreSQL. Confira o arquivo e a execução na sua cópia do projeto antes de marcá-lo como concluído.
 
-### Produtos — domínio
+## Módulo de produtos
 
-- Criação de produtos com **SKU, nome e preço**.
-- Validação de campos obrigatórios e preço positivo.
-- Restrição de preço a, no máximo, duas casas decimais significativas.
-- Normalização do SKU: remoção de espaços externos e conversão para maiúsculas.
-- Produtos criados inicialmente como **ativos**.
-- Operação de **desativação** de produtos.
-- Mapeamento da entidade `Product` com **JPA**.
+### Regras implementadas
 
-### Produtos — persistência e serviço
+- Produto com **SKU, nome, preço e estado ativo/inativo**.
+- SKU obrigatório, com normalização de espaços externos e letras maiúsculas.
+- Nome obrigatório.
+- Preço obrigatório, positivo e com precisão monetária de até duas casas decimais; na API, o DTO também limita o número de dígitos inteiros.
+- Produto criado inicialmente como **ativo**; operação de desativação disponível no domínio.
+- SKU único: verificação no `ProductService` e restrição no PostgreSQL.
+- Consulta por SKU normalizado; exceção específica quando não encontrado.
+- Entidade mapeada com JPA, sem expô-la diretamente no JSON da API.
 
-- Persistência de produtos por meio do `ProductRepository`.
-- Consulta de produtos por SKU (`findBySku`).
-- Verificação de existência de SKU (`existsBySku`).
-- Restrição de **SKU único** no PostgreSQL.
-- Verificação de duplicidade no `ProductService` antes de salvar um produto.
-- Exceção de negócio `DuplicateSkuException` para SKU já cadastrado.
+### Endpoints REST desenvolvidos localmente
 
-> A validação no serviço melhora o tratamento da regra de negócio. A restrição no banco continua necessária para garantir integridade, inclusive em situações de concorrência. O tratamento dessa exceção como resposta HTTP `409 Conflict` será implementado na camada REST.
+| Método | Rota | Comportamento | Status |
+|---|---|---|---|
+| `POST` | `/products` | Cadastra produto válido | `201 Created` |
+| `POST` | `/products` | Rejeita campos obrigatórios ou preço inválido | `400 Bad Request` |
+| `POST` | `/products` | Rejeita SKU já cadastrado | `409 Conflict` |
+| `GET` | `/products/{sku}` | Consulta um produto | `200 OK` |
+| `GET` | `/products/{sku}` | Produto inexistente | `404 Not Found` |
 
-## Funcionalidades planejadas
+A consulta usa o SKU informado na URL, normalizado pelo serviço. Os testes HTTP utilizam **MockMvc** para verificar esses contratos. **A implementação completa ainda precisa ser sincronizada e verificada na branch remota `main`.**
 
-### Gerenciamento de produtos
+### Exemplo: cadastrar produto
 
-- Endpoints REST para cadastro e consulta.
-- Atualização de informações e preços.
-- Ativação e desativação pela API.
-- Impedimento de novos pedidos com produtos desativados.
+```http
+POST /products
+Content-Type: application/json
+```
 
-### Controle de estoque
+```json
+{
+  "sku": " sku-001 ",
+  "name": "Teclado Mecânico",
+  "price": 250.00
+}
+```
 
-- Registro de entradas e movimentações.
-- Consulta de estoque físico, reservado e disponível.
-- Prevenção de estoque negativo.
-- Controle transacional e de concorrência nas reservas.
+**Resposta esperada — `201 Created`:**
 
-### Gerenciamento de pedidos
+```json
+{
+  "sku": "SKU-001",
+  "name": "Teclado Mecânico",
+  "price": 250.00,
+  "active": true
+}
+```
 
-- Criação de pedidos com múltiplos produtos.
-- Rejeição integral do pedido quando qualquer item não tiver estoque suficiente.
-- Reserva automática de estoque na criação.
-- Expiração de reservas após **10 minutos**.
-- Confirmação manual de pedidos pela API.
-- Cancelamento permitido somente para pedidos `RESERVED` dentro do prazo.
-- Expedição de pedidos confirmados, com baixa do estoque físico.
-- Proteção contra solicitações duplicadas usando chave de idempotência.
-- Preservação dos preços dos produtos no momento do pedido.
-- Identificação dos pedidos por **UUID**.
+### Exemplo: consultar produto
 
-## Ciclo de vida do pedido (planejado)
+```http
+GET /products/SKU-001
+```
+
+**Resposta esperada — `200 OK`:**
+
+```json
+{
+  "sku": "SKU-001",
+  "name": "Teclado Mecânico",
+  "price": 250.00,
+  "active": true
+}
+```
+
+### Respostas de erro
+
+Para regras de negócio, a API utiliza o DTO `ApiErrorResponse`:
+
+```json
+{
+  "message": "Product with SKU SKU-001 already exists"
+}
+```
+
+- **`409 Conflict`:** `DuplicateSkuException`.
+- **`404 Not Found`:** `ProductNotFoundException`.
+- **`400 Bad Request`:** validações de `@NotBlank`, `@NotNull`, `@DecimalMin` e `@Digits`.
+
+O tratamento de erros de validação via `MethodArgumentNotValidException` foi desenvolvido para reutilizar o mesmo formato `{"message": "..."}`. A consolidação do refactor, a execução completa dos testes e o push das mudanças de código ainda precisam ser verificados.
+
+> A verificação de SKU antes de `save()` facilita o erro de negócio, mas **não elimina disputas concorrentes**. A restrição única no banco é a proteção definitiva; o mapeamento do erro de integridade concorrente para HTTP 409 ainda pode ser aprimorado.
+
+## Estoque e pedidos — planejamento
+
+A migration inicial do Flyway prepara **produtos e inventário**. O domínio completo de estoque/pedidos ainda será implementado.
+
+### Estoque
+
+```text
+Estoque disponível = Estoque físico − Estoque reservado
+```
+
+A reserva reduz o estoque disponível. A baixa no estoque físico ocorrerá **somente na expedição**.
+
+O módulo deverá oferecer entradas de estoque, consulta de saldos, histórico de movimentações e proteção contra estoque negativo e concorrência.
+
+### Pedidos
+
+- Um pedido poderá conter **múltiplos itens**.
+- Falta de estoque em qualquer item deverá **rejeitar o pedido inteiro**, sem reserva parcial.
+- A criação do pedido deverá reservar o estoque por **10 minutos**.
+- A confirmação será explícita, via `POST /orders/{id}/confirm`, antes da expiração.
+- Cancelamento permitido apenas para pedidos `RESERVED` e ainda válidos.
+- Produtos inativos não poderão compor novos pedidos.
+- Valores unitários serão preservados no momento da criação do pedido.
+- Pedidos terão identificadores **UUID** e chave de idempotência para evitar duplicação.
+- As operações de reserva/expedição deverão garantir consistência sob concorrência.
+
+### Ciclo de vida previsto
 
 ```text
                     RESERVED
@@ -133,140 +214,155 @@ src/
                              SHIPPED
 ```
 
-- **RESERVED:** pedido criado, com estoque reservado por até 10 minutos.
-- **CONFIRMED:** pedido confirmado antes do vencimento da reserva; o estoque permanece reservado.
-- **SHIPPED:** pedido expedido; ocorre a redução definitiva do estoque físico.
-- **CANCELLED:** pedido cancelado enquanto estava reservado; a reserva é liberada.
-- **EXPIRED:** pedido não confirmado dentro do prazo; a reserva é liberada automaticamente.
+| Estado | Significado |
+|---|---|
+| `RESERVED` | Pedido criado, com estoque reservado até o prazo de expiração |
+| `CONFIRMED` | Pedido confirmado dentro do prazo; reserva mantida |
+| `SHIPPED` | Pedido expedido; baixa definitiva do estoque físico |
+| `CANCELLED` | Pedido cancelado enquanto reservado; estoque liberado |
+| `EXPIRED` | Prazo de confirmação vencido; estoque liberado |
 
-**Relação do estoque:**
-
-```text
-Estoque disponível = Estoque físico − Estoque reservado
-```
-
-A criação de uma reserva reduz o **estoque disponível**, mas não o **estoque físico**. A baixa física acontece somente na expedição.
-
-## Como executar o projeto
+## Executar localmente
 
 ### Pré-requisitos
 
 - **JDK 25**
-- **Docker** com suporte a Docker Compose
+- **Docker Desktop + Docker Compose**, com o Docker Engine em funcionamento
 - **Git**
 
-O ambiente utilizado no desenvolvimento é o **IntelliJ IDEA no Windows integrado ao Ubuntu WSL2**, com Docker Desktop e integração WSL habilitada.
+O desenvolvimento atual utiliza **IntelliJ IDEA no Windows com Ubuntu WSL2** e integração WSL habilitada no Docker Desktop.
 
-### 1. Iniciar o PostgreSQL
+### 1. Inicializar o banco de desenvolvimento
 
-Na raiz do projeto:
+Na raiz do repositório:
 
 ```bash
 docker compose up -d postgres
-```
-
-O PostgreSQL de desenvolvimento é exposto em `127.0.0.1:5433` para evitar conflito com uma instalação local na porta `5432`.
-
-Verifique o container:
-
-```bash
 docker compose ps
 ```
 
-### 2. Executar a aplicação
+O `compose.yaml` publica o PostgreSQL em **`127.0.0.1:5433`** (porta `5432` dentro do container), evitando conflito com um PostgreSQL local na porta `5432`.
+
+### 2. Iniciar a API
 
 ```bash
 ./gradlew bootRun --no-daemon --no-watch-fs --console=plain
 ```
 
-O **Flyway** aplica as migrations pendentes na inicialização. O Hibernate está configurado para **validar** o esquema, sem criá-lo automaticamente.
+As migrations Flyway são aplicadas na inicialização; o Hibernate valida a estrutura existente (`ddl-auto: validate`). Por padrão, a API fica disponível em `http://localhost:8080`, salvo configuração diferente.
 
-> Os dados e a senha definidos no `compose.yaml` destinam-se ao ambiente local de desenvolvimento; não devem ser reutilizados em produção.
+> As credenciais do Compose são destinadas **somente ao desenvolvimento local**. Não reutilize essas senhas em produção.
 
-### 3. Executar os testes
+### 3. Testar os endpoints manualmente
 
-Todos os testes:
+Com a aplicação rodando:
+
+```bash
+curl -i -X POST http://localhost:8080/products \
+  -H 'Content-Type: application/json' \
+  -d '{"sku":"SKU-001","name":"Teclado Mecânico","price":250.00}'
+
+curl -i http://localhost:8080/products/SKU-001
+```
+
+### 4. Executar os testes
+
+Toda a suíte:
 
 ```bash
 ./gradlew test --no-daemon --no-watch-fs --console=plain
 ```
 
-Testes unitários do domínio:
+Por camada:
 
 ```bash
 ./gradlew test --tests 'com.orderflow.model.ProductTest' --no-daemon --no-watch-fs --console=plain
-```
-
-Testes de integração do repositório:
-
-```bash
 ./gradlew test --tests 'com.orderflow.repository.ProductRepositoryTest' --no-daemon --no-watch-fs --console=plain
+./gradlew test --tests 'com.orderflow.service.ProductServiceTest' --no-daemon --no-watch-fs --console=plain
+./gradlew test --tests 'com.orderflow.controller.ProductControllerTest' --no-daemon --no-watch-fs --console=plain
+./gradlew test --tests 'com.orderflow.OrderflowApplicationTests' --no-daemon --no-watch-fs --console=plain
 ```
 
-Testes unitários do serviço:
+Caso você já tenha criado `ProductApiIntegrationTest`, execute:
 
 ```bash
-./gradlew test --tests 'com.orderflow.service.ProductServiceTest' --no-daemon --no-watch-fs --console=plain
+./gradlew test --tests 'com.orderflow.ProductApiIntegrationTest' --no-daemon --no-watch-fs --console=plain
 ```
 
-**Importante:** os testes com **Testcontainers** precisam que o Docker esteja em execução. O container PostgreSQL usado nos testes é separado do banco de desenvolvimento.
+**Testcontainers exige Docker ativo**, mas usa um PostgreSQL temporário e separado do banco de desenvolvimento. O teste de inicialização (`contextLoads`) também foi adaptado para utilizar essa conexão isolada.
 
-## Banco de dados
+## Banco de dados e migrações
 
-O projeto utiliza **PostgreSQL 17** e **Flyway**. As migrations ficam em:
+Os scripts SQL ficam em:
 
 ```text
 src/main/resources/db/migration/
 ```
 
-A migration inicial (`V1`) prepara as tabelas de **produtos e inventário**. As estruturas relacionadas a pedidos, reservas e movimentações serão adicionadas nas próximas etapas.
+A migration `V1__create_products_and_inventory.sql` cria o esquema inicial de produtos e inventário. Migrações futuras deverão acrescentar pedidos, itens, reservas e histórico de movimentos de estoque.
 
-## Estratégia de testes
+O Flyway é a fonte de verdade do esquema; não usamos Hibernate para criar tabelas automaticamente.
 
-O desenvolvimento segue o ciclo:
+## Qualidade e estratégia de testes
 
-1. **RED:** escrever um teste que falha, estabelecendo o comportamento esperado.
-2. **GREEN:** implementar o mínimo necessário para fazê-lo passar.
-3. **REFACTOR:** melhorar o código preservando os testes.
+O desenvolvimento segue o ciclo **RED → GREEN → REFACTOR**:
 
-### Cobertura implementada até o momento
+1. **RED:** escrever um teste que expõe o comportamento ausente.
+2. **GREEN:** implementar o mínimo para o teste passar.
+3. **REFACTOR:** melhorar o código, preservando as verificações.
 
-| Teste | Responsabilidade |
+| Classe de teste | Escopo |
 |---|---|
-| `ProductTest` | Criação, validações, normalização do SKU e desativação |
-| `ProductRepositoryTest` | Persistência, consulta por SKU e rejeição de SKU duplicado no PostgreSQL |
-| `ProductServiceTest` | Rejeição de SKU duplicado, com Mockito e sem gravação no banco |
+| `ProductTest` | Criação, validações, SKU e desativação |
+| `ProductRepositoryTest` | Salvamento, busca por SKU, restrição única com PostgreSQL/Testcontainers |
+| `ProductServiceTest` | Regras de cadastro e consulta com Mockito; exceções de negócio |
+| `ProductControllerTest` | Contratos HTTP de cadastro/consulta, validações e respostas de erro com MockMvc |
+| `OrderflowApplicationTests` | Inicialização do contexto Spring com banco de teste isolado |
+| `ProductApiIntegrationTest` | **Em validação:** fluxo HTTP real `POST` → banco → `GET` |
 
-Os testes de repositório usam **Testcontainers** para validar o comportamento com PostgreSQL real, sem depender dos dados do banco de desenvolvimento.
-- [x] Mapeamento JPA da entidade `Product`.
-- [x] Implementação de `ProductRepository`.
-- [x] Testes de integração com PostgreSQL usando Testcontainers.
-- [x] Restrição de SKU único validada no banco.
-- [x] Implementação inicial de `ProductService` e `DuplicateSkuException`.
-- [x] Teste unitário de rejeição de SKU duplicado no serviço.
+Os testes de Controller isolados usam mocks do serviço. O teste de integração da API, quando validado, deve usar componentes reais com PostgreSQL iniciado pelo Testcontainers.
 
-### Próximas etapas
+## Progresso e próximos passos
 
-- [ ] Ampliar os testes do `ProductService` para cadastro com SKU disponível.
-- [ ] Implementar DTOs, tratamento de erros e endpoints REST de produtos.
-- [ ] Implementar operações de estoque.
-- [ ] Implementar criação de pedidos e reserva temporária.
-- [ ] Implementar confirmação, cancelamento, expiração e expedição.
-- [ ] Testar transações, concorrência e idempotência.
-- [ ] Integrar mensageria com RabbitMQ.
-- [ ] Desenvolver dashboard em React + TypeScript.
+**Concluído e exercitado durante o desenvolvimento:**
 
-## Status do projeto
+- [x] Projeto Spring Boot / Java 25 / Gradle Groovy.
+- [x] Docker Compose com PostgreSQL 17 e Flyway V1.
+- [x] Entidade `Product`, regras e testes unitários.
+- [x] Persistência JPA e testes de Repository com Testcontainers.
+- [x] Serviço de cadastro/consulta, validação de SKU e exceções de negócio.
+- [x] `POST /products` e `GET /products/{sku}`, com DTOs.
+- [x] Testes de Controller para sucesso, validação de entrada, conflito e produto inexistente.
 
-**Em desenvolvimento.**
+**Em validação / próximas entregas:**
 
-O OrderFlow está sendo construído de maneira incremental, priorizando **testes automatizados, regras de negócio explícitas, integridade dos
-## Progresso do desenvolvimento
+- [ ] Confirmar a suíte completa após o refactor de `GlobalExceptionHandler`.
+- [ ] Verificar o teste `ProductApiIntegrationTest` com PostgreSQL real.
+- [ ] Ampliar a cobertura de respostas de erro e casos de borda.
+- [ ] Implementar módulo de estoque e operações transacionais.
+- [ ] Implementar pedidos, reservas, expiração e movimentações.
+- [ ] Tratar concorrência, idempotência e eventos assíncronos.
+- [ ] Construir dashboard com React + TypeScript.
 
-### Concluído
+Confira o [TODO.md](TODO.md) para o roadmap detalhado, organizado por etapas.
 
-- [x] Configuração de Java 25, Spring Boot e Gradle Groovy.
-- [x] Configuração do PostgreSQL 17 com Docker Compose.
-- [x] Configuração de conexão com o banco e primeira migration Flyway.
-- [x] Testes unitários da entidade `Product`.
+## Sincronização com o GitHub
 
+Este README descreve o **progresso relatado e testado no ambiente local**. Na última conferência da branch `main` remota, o código publicado ainda não incluía todas as etapas posteriores ao cadastro de produtos, incluindo o endpoint GET, parte das validações de preço, os tratamentos HTTP 404/400 e o teste `ProductApiIntegrationTest`.
+
+Ao sincronizar o código a partir do WSL2, primeiro confira as alterações pendentes e o histórico remoto. **Como a documentação pode ser atualizada diretamente no GitHub, não faça `git push --force`.** Se houver trabalho local ainda sem commit, registre-o antes de integrar o histórico:
+
+```bash
+git status
+git add <arquivos-de-codigo-alterados>
+git commit -m "feat: consolida endpoints e validacoes de produtos"
+git pull --rebase origin main
+./gradlew test --no-daemon --no-watch-fs --console=plain
+git push origin main
+```
+
+Substitua `<arquivos-de-codigo-alterados>` pelos caminhos reais que deseja incluir no commit; não execute o comando literalmente. Se o rebase acusar conflitos, resolva-os antes do push.
+
+## Status
+
+**Em desenvolvimento.** O projeto prioriza incrementos pequenos, testes automatizados, contratos HTTP claros e integridade dos dados. O módulo de produtos é a base para os próximos módulos de estoque e pedidos.
