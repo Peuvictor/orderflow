@@ -40,11 +40,6 @@ public class Product {
 
     public Product(String sku, String name, BigDecimal price) {
 
-        if (sku == null || sku.isBlank()) {
-            throw new IllegalArgumentException(
-                    "SKU cannot be empty"
-            );
-        }
 
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException(
@@ -60,7 +55,7 @@ public class Product {
             );
         }
 
-        this.sku = sku.trim().toUpperCase(Locale.ROOT);
+        this.sku = normalizeSku(sku);
         this.name = name.trim();
         this.price = price.setScale(2, RoundingMode.UNNECESSARY);
         this.active = true;
@@ -80,5 +75,16 @@ public class Product {
     @PreUpdate
     void onUpdate() {
         this.updatedAt = Instant.now();
+    }
+
+    public static String normalizeSku(String sku) {
+
+        if (sku == null || sku.isBlank()) {
+            throw new IllegalArgumentException(
+                    "SKU cannot be empty"
+            );
+        }
+
+        return sku.trim().toUpperCase(Locale.ROOT);
     }
 }
